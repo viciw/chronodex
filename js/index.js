@@ -13,36 +13,28 @@ var app = {
 
     onDeviceReady: function() {
         canvasRender.renderChronodex();
+		sectors = storageManager.get();
+		sectors = sectors ? sectors : [];
+		for (var i = 0; i < sectors.length; i++ ) {
+			canvasRender.renderSector(sectors[i]);
+		}
 		var container = document.getElementById('canvas-container');
 		container.addEventListener('click', this.fillSector, false);
+
     },
 	
 	fillSector: function(event) {
-		var x = event.clientX;
-		var y = event.clientY;
-		var rect = canvas.getBoundingClientRect();
-		x -= rect.left + center; 
-		y -= rect.top + center;
-		var r = Math.sqrt(x * x + y * y);
-		var inner = Math.floor( r / radius);
-		var outer = inner + 1;
-		var dgr = Math.atan2(y, x);
-		var start = Math.floor( dgr / Math.PI * 6);
-		var end = start + 1;
-		if (inner < 1 || inner > 5) return;
-		if (inner == 5) {
-			if (!(start >= -6 && start <= -4)) return;
+		var sector = geometryManager.getSelectedSector(event);
+		var style = 'red';
+		if (sector) {
+			sector.style = style;
+			canvasRender.renderSector(sector);		
+			sectors.push(sector);
 		}
-		if (inner == 1) {
-			if ((start >= -6 && start <= -4)) return;
-		}
-		canvasRender.renderSector(inner, outer, start, end, 'red');
-		var h;
-		h =  start > 0? start + 3: start + 6;
-		if (inner > 1)  hh += 12;
 	}
 };
 
+var sectors;
 var size = 500;
 var grid = size / 10;
 var center = size / 2;
@@ -191,8 +183,8 @@ var canvasRender = {
 		for(var i = 1; i < 7; i++){
 			ctx.save();
 			ctx.rotate( - Math.PI / 2  + Math.PI / 6 * i);
-			ctx.fillText(i + 'am', radius * 1.5, -5);
-			ctx.fillText(i + 'pm', radius * (2.5 + (i - 1) % 3), -5);
+			ctx.fillText(i + 'am', radius * 1.5, 10);
+			ctx.fillText(i + 'pm', radius * (2.5 + i % 3), 10);
 			ctx.restore();
 		}
 		//counter clockwise
@@ -205,11 +197,13 @@ var canvasRender = {
 			} else {
 				ctx.fillText(i + 'am', -radius * (2.5 + i % 3), -5);
 				ctx.fillText(i + 'pm', -radius * 5.5 , -5);
-			}ctx.restore();
+			}
+			ctx.restore();
 		}
 		//12noon
-		ctx.rotate(Math.PI / 2);
-		ctx.fillText(12 + 'noon', -radius * 5.5 , -5);
+		ctx.rotate(-Math.PI / 2);
+		ctx.fillText('night', radius * 1.5 , 10);
+		ctx.fillText('noon', radius * 2.5 , 10);
 		ctx.restore();
 	},
 	renderArrow: function() {
@@ -242,21 +236,61 @@ var canvasRender = {
 		this.renderTime();
 		this.renderArrow();
 	},
-	renderSector: function (outer, inner, start, end, fillStyle) {
+	renderSector: function (sector) {
 		dctx.save();
 		dctx.translate(center, center);
 		dctx.beginPath();
-		var sDgr = start * Math.PI / 6;
-		var eDgr = end * Math.PI / 6;
+		var inner = sector.cid;
+		var outer = inner + 1;
+		var sDgr = sector.sid * Math.PI / 6;
+		var eDgr = (sector.sid + 1) * Math.PI / 6;
 		dctx.arc(0, 0, outer * radius, sDgr, eDgr, false);
 		dctx.arc(0, 0, inner * radius, eDgr, sDgr, true);
 		dctx.closePath();
-		dctx.fillStyle = fillStyle;
+		dctx.fillStyle = sector.style ? sector.style : 'white';
 		dctx.fill();
 		dctx.restore();
-	}	
+	}
 };
 
+var geometryManager = {
+	getSelectedSector: function(event) {
+		var x = event.clientX;
+		var y = event.clientY;
+		var rect = canvas.getBoundingClientRect();
+		x -= rect.left + center; 
+		y -= rect.top + center;
+		var r = Math.sqrt(x * x + y * y);
+		var cid = Math.floor( r / radius);
+		var sid = Math.floor( Math.atan2(y, x) / Math.PI * 6);
+		if (this.isValidSector(cid, sid))  {
+			return {'cid': cid, 'sid': sid};
+		}
+	},
+	isValidSector: function(cid, sid) {
+		if (cid < 1 || cid > 5) return false;
+		if (cid == 5) {
+			if (!(sid >= -6 && sid <= -4)) return false;
+		}
+		if (cid == 1) {
+			if ((sid >= -6 && sid <= -4)) return false;
+		}
+		return true;
+	}
+}
+
+var storageManager = {
+	save: function() {
+		localStorage.setItem('chronodex', JSON.stringify(sectors));
+	},
+	get: function() {
+		return JSON.parse(localStorage.getItem('chronodex'));
+	}
+}
 app.initialize();
+window.onbeforeunload = function() {
+    storageManager.save();
+	return true;
+};
 
 
