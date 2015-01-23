@@ -1,3 +1,8 @@
+var categoryKey = 'chronodex.category';
+var	dataKey = 'chronodex.data';
+var sectors;
+var categories;
+var container = document.getElementById('canvas-container');
 var app = {
     initialize: function() {
         this.bindEvents();
@@ -5,7 +10,7 @@ var app = {
 
     bindEvents: function() {
 		if (navigator.userAgent.match(/(iPhone|iPad|Android)/)) {
-			document.addEventListener('deviceready', this.onDeviceReady, false);
+			document.addEventListener('deviceready', app.onDeviceReady, false);
 		} else {
 			app.onDeviceReady();
 		}       
@@ -13,28 +18,54 @@ var app = {
 
     onDeviceReady: function() {
         canvasRender.renderChronodex();
-		sectors = storageManager.get();
-		sectors = sectors ? sectors : [];
+		storageManager.getSectors();
+		storageManager.getCategories();
+		var sector;
+		var style;
 		for (var i = 0; i < sectors.length; i++ ) {
-			canvasRender.renderSector(sectors[i]);
+			sector = sectors[i];
+			style = categories[sector.sid].style;
+			canvasRender.renderSector(sector, style);
 		}
-		var container = document.getElementById('canvas-container');
-		container.addEventListener('click', this.fillSector, false);
-
+		container.addEventListener('click', geometryManager.select, false);
+		window.addEventListener('beforeunload', storageManager.saveSectors, false);
     },
 	
-	fillSector: function(event) {
-		var sector = geometryManager.getSelectedSector(event);
-		var style = 'red';
+	fillSector: function(sector) {
+		currStyle = currStyle ? currStyle : categories.length - 1;
 		if (sector) {
-			sector.style = style;
-			canvasRender.renderSector(sector);		
+			sector.sid = currStyle;
+			canvasRender.renderSector(sector, categories[currStyle].style);		
 			sectors.push(sector);
 		}
+	},
+	showPalette: function(){
+		isPalette = !isPalette;
+	
+		if (isPalette) {
+			canvas.style.visibility = "hidden";
+			decorateCanvas.style.visibility = "hidden";	
+			container.removeEventListener('click', app.fillSector);
+			canvasRender.renderPaletteGrids('grey');
+			for (var i = 0; i < categories.length; i++ ) {
+				canvasRender.renderPalette(categories[i], i);
+			}
+		} else {
+			canvas.style.visibility = "visible";
+			decorateCanvas.style.visibility = "visible";
+			canvasRender.renderPaletteGrids('lightgrey');
+			container.addEventListener('click', app.fillSector, false);
+		}
+	},
+	newCategory: function() {
+		canvasRender.loadColorWheel();
+		isColor = true;
 	}
 };
 
-var sectors;
+var isPalette = false;
+var isColor = false;
+var currStyle;
 var size = 500;
 var grid = size / 10;
 var center = size / 2;
@@ -43,23 +74,30 @@ var canvas = document.getElementById('chronodex');
 var ctx = canvas.getContext('2d');
 var decorateCanvas = document.getElementById('decorate');
 var dctx= decorateCanvas.getContext('2d');
+var paletteCanvas = document.getElementById('palette');
+var pctx= paletteCanvas.getContext('2d');
 var canvasRender = {
 	init: function() {
+		paletteCanvas.width = paletteCanvas.height =  size;
 		decorateCanvas.width = decorateCanvas.height =  size;
 		canvas.width =  canvas.height = size;
 	},
+	renderPaletteGrids: function(strokStyle) {
+		pctx.clearRect(0, 0, size, size);
+		pctx.save();
+		pctx.strokeStyle = strokStyle ? strokStyle : 'lightgrey';
+		pctx.setLineDash([7, 5]);
+		pctx.beginPath();
+		for (var i = 0; i < 11; i++) {
+			pctx.moveTo(0, i * grid);
+			pctx.lineTo(size, i * grid);
+			pctx.moveTo(i * grid, 0);
+			pctx.lineTo(i * grid, size);
+		}
+		pctx.stroke();
+	},
 	renderBackground: function() {
 		dctx.save();
-		dctx.strokeStyle = 'lightgrey';
-		dctx.setLineDash([7, 5]);
-		dctx.beginPath();
-		for (var i = 0; i < 11; i++) {
-			dctx.moveTo(0, i * grid);
-			dctx.lineTo(size, i * grid);
-			dctx.moveTo(i * grid, 0);
-			dctx.lineTo(i * grid, size);
-		}
-		dctx.stroke();
 		dctx.beginPath();
 		dctx.moveTo(center, center);
 		for (var i = 0; i < 12; i++) {
@@ -229,6 +267,7 @@ var canvasRender = {
 	},
 	renderChronodex: function() {
 		this.init();
+		this.renderPaletteGrids();
 		this.renderBackground();
 		this.renderCobweb();
 		this.renderTitle();
@@ -236,61 +275,150 @@ var canvasRender = {
 		this.renderTime();
 		this.renderArrow();
 	},
-	renderSector: function (sector) {
+	renderSector: function (sector, style) {
 		dctx.save();
 		dctx.translate(center, center);
 		dctx.beginPath();
 		var inner = sector.cid;
 		var outer = inner + 1;
-		var sDgr = sector.sid * Math.PI / 6;
-		var eDgr = (sector.sid + 1) * Math.PI / 6;
+		var sDgr = sector.rid * Math.PI / 6;
+		var eDgr = (sector.rid + 1) * Math.PI / 6;
 		dctx.arc(0, 0, outer * radius, sDgr, eDgr, false);
 		dctx.arc(0, 0, inner * radius, eDgr, sDgr, true);
 		dctx.closePath();
-		dctx.fillStyle = sector.style ? sector.style : 'white';
+		dctx.fillStyle = style ? style : 'white';
 		dctx.fill();
 		dctx.restore();
+	},
+	renderPalette: function(category, i) {
+		i+=2;
+		pctx.save();
+		var row = Math.floor (i / 10);
+		var col = i % 10 - 1;
+		pctx.fillStyle = category.style;
+		pctx.beginPath();
+		pctx.rect(col * grid, row * grid, grid, grid);
+		pctx.fill();
+		pctx.restore();
+	},
+	loadColorWheel: function() {
+		var image = new Image();
+		image.onload = function() {
+	       pctx.globalAlpha = 0.8;
+           pctx.drawImage(image, center - image.width / 2, center - image.height / 2);
+		};
+		image.src = 'img/colorWheel.png';
+		
 	}
 };
 
 var geometryManager = {
-	getSelectedSector: function(event) {
+	isValidSector: function(cid, rid) {
+		if (cid < 1 || cid > 5) return false;
+		if (cid == 5) {
+			if (!(rid >= -6 && rid <= -4)) return false;
+		}
+		if (cid == 1) {
+			if ((rid >= -6 && rid <= -4)) return false;
+		}
+		return true;
+	},
+	isBack: function(x, y) {
+		if (x < grid && y < grid) return true;
+		return false;
+	},
+	isValidColor: function(x, y) {
+		x -= center;
+		y -= center;
+		var r = Math.sqrt(x * x + y * y);
+		 //image size* 0.5
+		if (r < 150) return true;
+		return false;
+	},
+	select: function(event) {
 		var x = event.clientX;
 		var y = event.clientY;
 		var rect = canvas.getBoundingClientRect();
-		x -= rect.left + center; 
-		y -= rect.top + center;
-		var r = Math.sqrt(x * x + y * y);
-		var cid = Math.floor( r / radius);
-		var sid = Math.floor( Math.atan2(y, x) / Math.PI * 6);
-		if (this.isValidSector(cid, sid))  {
-			return {'cid': cid, 'sid': sid};
+		x = Math.floor(x - rect.left); 
+		y = Math.floor(y - rect.top);
+		if(!isPalette) {
+			x -= center;
+			y -= center;
+			var r = Math.sqrt(x * x + y * y);
+			var cid = Math.floor( r / radius);
+			var rid = Math.floor( Math.atan2(y, x) / Math.PI * 6);
+			if (geometryManager.isValidSector(cid, rid))  {
+				app.fillSector({'cid': cid, 'rid': rid});
+			} else {
+				app.showPalette();
+			}
+		} else {
+			if (geometryManager.isBack(x, y)) {
+				app.showPalette();
+			} else {
+				if (!isColor) {
+					var row = Math.floor( y / grid);
+					var column = Math.floor( x / grid);
+					var i  = row * 10 + column - 1;
+					if (i < categories.length ) {
+						currStyle = i;
+					} else {
+						app.newCategory();
+					}
+				} else {
+					if (!geometryManager.isValidColor(x, y)) {
+						alert("Pls select a color");
+						return;
+					}
+					var imageData = pctx.getImageData(x, y, 1, 1);
+					var pixel = imageData.data;
+					var dColor = pixel[2] + 256 * pixel[1] + 65536 * pixel[0];
+					var color = '#' + ('0000' + dColor.toString(16)).substr(-6);
+					var category = {'style': color, 'note': ''};
+					categories.push(category);
+					storageManager.saveCategories();
+					currStyle = categories.length - 1;
+					canvasRender.renderPalette(category, currStyle);
+				}
+			}
 		}
-	},
-	isValidSector: function(cid, sid) {
-		if (cid < 1 || cid > 5) return false;
-		if (cid == 5) {
-			if (!(sid >= -6 && sid <= -4)) return false;
-		}
-		if (cid == 1) {
-			if ((sid >= -6 && sid <= -4)) return false;
-		}
-		return true;
 	}
-}
+};
+
+Storage.prototype.save = function(key, data) {
+	data = typeof data === 'object' ? JSON.stringify(data) : data;
+	localStorage.setItem(key, data);
+};
+
+Storage.prototype.get = function(key) {
+	var data = localStorage.getItem(key);
+	try {
+		return JSON.parse(data);        
+	} catch (e) { 
+		return data;
+	}
+};
 
 var storageManager = {
-	save: function() {
-		localStorage.setItem('chronodex', JSON.stringify(sectors));
+	saveSectors: function() {
+		localStorage.save(dataKey, sectors);
 	},
-	get: function() {
-		return JSON.parse(localStorage.getItem('chronodex'));
+	getSectors: function() {
+		sectors = localStorage.get(dataKey);
+		sectors = sectors === null ? [] : sectors;
+	},
+	saveCategories: function() {
+		localStorage.save(categoryKey, categories);
+	},
+	getCategories: function() {
+		categories = localStorage.get(categoryKey);
+		categories = categories === null ? [{'style': 'white', 'note': ''}] : categories;
+	},
+	saveAll: function() {
+		localStorage.save(dataKey, sectors);
+		localStorage.save(categoryKey, categories);
 	}
 }
 app.initialize();
-window.onbeforeunload = function() {
-    storageManager.save();
-	return true;
-};
 
 
