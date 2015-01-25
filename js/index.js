@@ -3,6 +3,7 @@ var	dataKey = 'chronodex.data';
 var sectors;
 var categories;
 var container = document.getElementById('canvas-container');
+var status = 0;
 var app = {
     initialize: function() {
         this.bindEvents();
@@ -28,7 +29,7 @@ var app = {
 			canvasRender.renderSector(sector, style);
 		}
 		container.addEventListener('click', geometryManager.select, false);
-		window.addEventListener('beforeunload', storageManager.saveSectors, false);
+		//window.addEventListener('beforeunload', storageManager.saveSectors, false);
     },
 	
 	fillSector: function(sector) {
@@ -40,15 +41,14 @@ var app = {
 		}
 	},
 	showPalette: function(){
-		isPalette = !isPalette;
-	
+		isPalette = !isPalette;	
 		if (isPalette) {
 			canvas.style.visibility = "hidden";
 			decorateCanvas.style.visibility = "hidden";	
-			container.removeEventListener('click', app.fillSector);
 			canvasRender.renderPaletteGrids('grey');
+			canvasRender.renderColorWheel();
 			for (var i = 0; i < categories.length; i++ ) {
-				canvasRender.renderPalette(categories[i], i);
+				canvasRender.renderPalette(categories[i].style, i);
 			}
 		} else {
 			canvas.style.visibility = "visible";
@@ -58,7 +58,7 @@ var app = {
 		}
 	},
 	newCategory: function() {
-		canvasRender.loadColorWheel();
+		canvasRender.renderColorWheel();
 		isColor = true;
 	}
 };
@@ -77,6 +77,9 @@ var dctx= decorateCanvas.getContext('2d');
 var paletteCanvas = document.getElementById('palette');
 var pctx= paletteCanvas.getContext('2d');
 var canvasRender = {
+	colors: ["#B8D430", "#3AB745", "#029990", "#3501CB",
+		          "#2E2C75", "#673A7E", "#CC0071", "#F80120",
+                 "#F35B20", "#FB9A00", "#FFCC00", "#FEF200"],
 	init: function() {
 		paletteCanvas.width = paletteCanvas.height =  size;
 		decorateCanvas.width = decorateCanvas.height =  size;
@@ -281,6 +284,7 @@ var canvasRender = {
 		dctx.beginPath();
 		var inner = sector.cid;
 		var outer = inner + 1;
+		//var r = sector.rid > 8 ? sector.rid - 12 : sector.rid - 3;
 		var sDgr = sector.rid * Math.PI / 6;
 		var eDgr = (sector.rid + 1) * Math.PI / 6;
 		dctx.arc(0, 0, outer * radius, sDgr, eDgr, false);
@@ -290,25 +294,42 @@ var canvasRender = {
 		dctx.fill();
 		dctx.restore();
 	},
-	renderPalette: function(category, i) {
-		i+=2;
+	renderPalette: function(style, i) {
 		pctx.save();
-		var row = Math.floor (i / 10);
-		var col = i % 10 - 1;
-		pctx.fillStyle = category.style;
+		var row = Math.floor (i / 4) + 3;
+		var col = i % 4 + 3 ;
+		pctx.fillStyle = style;
 		pctx.beginPath();
 		pctx.rect(col * grid, row * grid, grid, grid);
 		pctx.fill();
+		var lastCol = col == 7 ? 3 : col + 1;
+		var lastRow = lastCol == 3 ? row + 1 : row;
 		pctx.restore();
 	},
-	loadColorWheel: function() {
-		var image = new Image();
-		image.onload = function() {
-	       pctx.globalAlpha = 0.8;
-           pctx.drawImage(image, center - image.width / 2, center - image.height / 2);
-		};
-		image.src = 'img/colorWheel.png';
-		
+	renderPlusPlatte: function() {
+		var i = categories.length;
+		var row = Math.floor (i / 4) + 3;
+		var col = i % 4 + 3;
+		pctx.font = "Bold 20pt Arial";
+		pctx.fillText("+", col * grid + grid / 3, row * grid + 35);	
+	},
+	renderColorWheel: function() {
+		pctx.save();
+		pctx.translate(center, center);
+		for(var i = 0; i < 12; i++) {
+			pctx.beginPath();
+			var sDgr = i * Math.PI / 6;
+			var eDgr = (i + 1) * Math.PI / 6;
+			pctx.arc(0, 0, 6 * radius, sDgr, eDgr, false);
+			pctx.arc(0, 0, 5 * radius, eDgr, sDgr, true);
+			pctx.closePath();
+			var grd=ctx.createLinearGradient(5 * radius * Math.cos(sDgr), 5 * radius * Math.sin(sDgr), 6 * radius * Math.cos(eDgr), 6 * radius * Math.sin(eDgr));
+			grd.addColorStop(0,this.colors[i]);
+			grd.addColorStop(1,this.colors[i+1]?this.colors[i+1]:this.colors[0]);
+			pctx.fillStyle = grd; //this.colors[i];
+			pctx.fill();		
+		}	
+		pctx.restore();		
 	}
 };
 
@@ -323,28 +344,22 @@ var geometryManager = {
 		}
 		return true;
 	},
-	isBack: function(x, y) {
-		if (x < grid && y < grid) return true;
+	isBack: function(r) {
+		if (r > radius * 6) return true;
 		return false;
 	},
-	isValidColor: function(x, y) {
-		x -= center;
-		y -= center;
-		var r = Math.sqrt(x * x + y * y);
-		 //image size* 0.5
-		if (r < 150) return true;
+	isValidColor: function(r) {
+		if ( r >= radius * 5 && r <= radius * 6) return true;
 		return false;
 	},
 	select: function(event) {
 		var x = event.clientX;
 		var y = event.clientY;
 		var rect = canvas.getBoundingClientRect();
-		x = Math.floor(x - rect.left); 
-		y = Math.floor(y - rect.top);
+		x -= rect.left + center;
+		y -= rect.top + center;
+		var r = Math.sqrt(x * x + y * y);
 		if(!isPalette) {
-			x -= center;
-			y -= center;
-			var r = Math.sqrt(x * x + y * y);
 			var cid = Math.floor( r / radius);
 			var rid = Math.floor( Math.atan2(y, x) / Math.PI * 6);
 			if (geometryManager.isValidSector(cid, rid))  {
@@ -353,10 +368,10 @@ var geometryManager = {
 				app.showPalette();
 			}
 		} else {
-			if (geometryManager.isBack(x, y)) {
+			if (geometryManager.isBack(r)) {
 				app.showPalette();
 			} else {
-				if (!isColor) {
+				if (isColor) {
 					var row = Math.floor( y / grid);
 					var column = Math.floor( x / grid);
 					var i  = row * 10 + column - 1;
@@ -366,11 +381,12 @@ var geometryManager = {
 						app.newCategory();
 					}
 				} else {
-					if (!geometryManager.isValidColor(x, y)) {
-						alert("Pls select a color");
+					if (!geometryManager.isValidColor(r)) {
+						isColor = false;
 						return;
 					}
-					var imageData = pctx.getImageData(x, y, 1, 1);
+					pctx.save();
+					var imageData = pctx.getImageData(x + center, y + center, 1, 1);
 					var pixel = imageData.data;
 					var dColor = pixel[2] + 256 * pixel[1] + 65536 * pixel[0];
 					var color = '#' + ('0000' + dColor.toString(16)).substr(-6);
@@ -378,7 +394,8 @@ var geometryManager = {
 					categories.push(category);
 					storageManager.saveCategories();
 					currStyle = categories.length - 1;
-					canvasRender.renderPalette(category, currStyle);
+					canvasRender.renderPalette(color, currStyle);
+					canvasRender.renderPlusPlatte();
 				}
 			}
 		}
@@ -412,7 +429,7 @@ var storageManager = {
 	},
 	getCategories: function() {
 		categories = localStorage.get(categoryKey);
-		categories = categories === null ? [{'style': 'white', 'note': ''}] : categories;
+		categories = categories === null ? [{'style': 'white', 'note': 'Clear'}, {'style': 'black', 'note': 'Unknown'}, {'style': 'grey', 'note': 'Sleep'}] : categories;
 	},
 	saveAll: function() {
 		localStorage.save(dataKey, sectors);
