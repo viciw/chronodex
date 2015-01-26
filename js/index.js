@@ -29,15 +29,19 @@ var app = {
 			canvasRender.renderSector(sector, style);
 		}
 		container.addEventListener('click', geometryManager.select, false);
-		//window.addEventListener('beforeunload', storageManager.saveSectors, false);
+		window.addEventListener('beforeunload', storageManager.saveSectors, false);
     },
 	
 	fillSector: function(sector) {
-		currStyle = currStyle ? currStyle : categories.length - 1;
 		if (sector) {
 			sector.sid = currStyle;
-			canvasRender.renderSector(sector, categories[currStyle].style);		
-			sectors.push(sector);
+			canvasRender.renderSector(sector, categories[currStyle].style);	
+			if (currStyle = 0) {
+				sectors.splice(sector);
+			} else {						
+				sectors.push(sector);
+			}
+
 		}
 	},
 	showPalette: function(){
@@ -46,15 +50,15 @@ var app = {
 			canvas.style.visibility = "hidden";
 			decorateCanvas.style.visibility = "hidden";	
 			canvasRender.renderPaletteGrids('grey');
-			canvasRender.renderColorWheel();
+			//canvasRender.renderColorWheel();
 			for (var i = 0; i < categories.length; i++ ) {
 				canvasRender.renderPalette(categories[i].style, i);
 			}
+			canvasRender.renderPlusPlatte();
 		} else {
 			canvas.style.visibility = "visible";
 			decorateCanvas.style.visibility = "visible";
 			canvasRender.renderPaletteGrids('lightgrey');
-			container.addEventListener('click', app.fillSector, false);
 		}
 	},
 	newCategory: function() {
@@ -110,7 +114,7 @@ var canvasRender = {
 		dctx.fill();
 		dctx.restore();
 		
-	},
+	},/*
 	renderCobweb: function(){
 		//dashed
 		ctx.save();
@@ -184,6 +188,14 @@ var canvasRender = {
 		ctx.stroke();		
 		ctx.restore();		
 	},	
+	loadCobWeb: function() {
+			var imageObj = new Image();
+			imageObj.onload = function() {
+				ctx.drawImage(imageObj, 0, 0);
+			};
+			imageObj.src = 'img/chronodex.png';
+	},*/
+
 	renderTitle: function() {
 		var str = "CHRONODEX";
 		var len = str.length, s;
@@ -216,6 +228,7 @@ var canvasRender = {
 		ctx.fillText(weekday, 0, 20);
 		ctx.restore();
 	},
+	/*
 	renderTime: function() {
 		ctx.save();
 		ctx.translate(center, center);
@@ -246,8 +259,9 @@ var canvasRender = {
 		ctx.fillText('night', radius * 1.5 , 10);
 		ctx.fillText('noon', radius * 2.5 , 10);
 		ctx.restore();
-	},
+	},*/
 	renderArrow: function() {
+
 		var now = new Date();
 		var hh = now.getHours();
 		var h = hh % 12;
@@ -272,11 +286,13 @@ var canvasRender = {
 		this.init();
 		this.renderPaletteGrids();
 		this.renderBackground();
-		this.renderCobweb();
-		this.renderTitle();
+		//this.renderArrow();
+		//this.renderCobweb();
+		//this.renderTitle();
+		//this.loadCobWeb();
 		this.renderDate();
-		this.renderTime();
 		this.renderArrow();
+
 	},
 	renderSector: function (sector, style) {
 		dctx.save();
@@ -310,16 +326,22 @@ var canvasRender = {
 		var i = categories.length;
 		var row = Math.floor (i / 4) + 3;
 		var col = i % 4 + 3;
-		pctx.font = "Bold 20pt Arial";
+		pctx.font = "20pt Arial";
 		pctx.fillText("+", col * grid + grid / 3, row * grid + 35);	
 	},
 	renderColorWheel: function() {
+			var imageObj = new Image();
+			imageObj.onload = function() {
+				pctx.drawImage(imageObj, 0, 0);
+			};
+			imageObj.src = 'img/colorwheel.png';
+		/*
 		pctx.save();
 		pctx.translate(center, center);
 		for(var i = 0; i < 12; i++) {
 			pctx.beginPath();
 			var sDgr = i * Math.PI / 6;
-			var eDgr = (i + 1) * Math.PI / 6;
+			var eDgr = (i + 1) * Math.PI / 6 + Math.PI / 180 * 0.2;
 			pctx.arc(0, 0, 6 * radius, sDgr, eDgr, false);
 			pctx.arc(0, 0, 5 * radius, eDgr, sDgr, true);
 			pctx.closePath();
@@ -330,6 +352,7 @@ var canvasRender = {
 			pctx.fill();		
 		}	
 		pctx.restore();		
+		*/
 	}
 };
 
@@ -352,52 +375,70 @@ var geometryManager = {
 		if ( r >= radius * 5 && r <= radius * 6) return true;
 		return false;
 	},
+	isPlus: function(x, y){
+		var row = Math.floor( y / grid);
+		var column = Math.floor( x / grid);
+		var i = (row - 3) * 4 + column - 3;
+		if( i == categories.length) return true;
+		return false;
+	},
+	getCategory: function(x,y) {
+		var row = Math.floor( y / grid);
+		var column = Math.floor( x / grid) ;
+		var i = (row - 3) * 4 + column - 3;
+		if (row >= 3 && row <= 6 && column >=3 && column <= 6 && i < categories.length) return i;
+		return null;
+	},
 	select: function(event) {
 		var x = event.clientX;
 		var y = event.clientY;
 		var rect = canvas.getBoundingClientRect();
-		x -= rect.left + center;
-		y -= rect.top + center;
-		var r = Math.sqrt(x * x + y * y);
+		x -= rect.left;
+		y -= rect.top;
+		var cx =  x - center;
+		var	cy = y - center;
+		var r = Math.sqrt(cx * cx + cy * cy);
 		if(!isPalette) {
 			var cid = Math.floor( r / radius);
-			var rid = Math.floor( Math.atan2(y, x) / Math.PI * 6);
+			var rid = Math.floor( Math.atan2(cy, cx) / Math.PI * 6);
 			if (geometryManager.isValidSector(cid, rid))  {
 				app.fillSector({'cid': cid, 'rid': rid});
 			} else {
-				app.showPalette();
+				app.showPalette();				
 			}
+			return;
 		} else {
 			if (geometryManager.isBack(r)) {
 				app.showPalette();
-			} else {
-				if (isColor) {
-					var row = Math.floor( y / grid);
-					var column = Math.floor( x / grid);
-					var i  = row * 10 + column - 1;
-					if (i < categories.length ) {
-						currStyle = i;
-					} else {
-						app.newCategory();
-					}
-				} else {
-					if (!geometryManager.isValidColor(r)) {
-						isColor = false;
-						return;
-					}
-					pctx.save();
-					var imageData = pctx.getImageData(x + center, y + center, 1, 1);
-					var pixel = imageData.data;
-					var dColor = pixel[2] + 256 * pixel[1] + 65536 * pixel[0];
-					var color = '#' + ('0000' + dColor.toString(16)).substr(-6);
-					var category = {'style': color, 'note': ''};
-					categories.push(category);
-					storageManager.saveCategories();
-					currStyle = categories.length - 1;
-					canvasRender.renderPalette(color, currStyle);
-					canvasRender.renderPlusPlatte();
-				}
+				return;
+			} 
+			
+			if (geometryManager.isPlus(x, y)) {
+				canvasRender.renderColorWheel();
+				isColor = true;
+				return;
 			}
+			
+			if (isColor) {
+				if (!geometryManager.isValidColor(r)) {
+					return;
+				}
+				var imageData = pctx.getImageData(x, y, 1, 1);
+				var pixel = imageData.data;
+				var dColor = pixel[2] + 256 * pixel[1] + 65536 * pixel[0];
+				var color = '#' + ('0000' + dColor.toString(16)).substr(-6);
+				var category = {'style': color, 'note': ''};
+				categories.push(category);
+				storageManager.saveCategories();
+				currStyle = categories.length - 1;
+				canvasRender.renderPalette(color, currStyle);
+				canvasRender.renderPlusPlatte();
+				isColor = false;
+				return;				
+			}
+			var i = geometryManager.getCategory(x, y);
+			if (i !== null) currStyle = i;
+		
 		}
 	}
 };
